@@ -596,145 +596,173 @@ st.set_page_config(page_title="서논술형 자동 채점", layout="wide")
 st.title("📝 서·논술형 문항 자동 채점 (2회시험 대비)")
 st.caption("세트1(사회적 촉진·억제) / 세트2(정전기) / 세트3(인공지능 예술)")
 
-set_key = st.sidebar.radio("세트 선택", list(RUBRIC.keys()),
-                            format_func=lambda k: f"{k} · {RUBRIC[k]['title']}")
-set_rubric = RUBRIC[set_key]
+# ---------------------------------------------------------
+# 질문(Q&A) 저장소 공통 유틸
+# store_key 형식: "{세트}_{문항}"  예) "세트1_q1"
+# ---------------------------------------------------------
+
+PAGE_TITLES = {
+    "q1": "서논술형 1 (빈칸)",
+    "q2": "서논술형 2 (문장)",
+    "q3": "서논술형 3 (영상 기획)",
+}
 
 
-def render_qna_section(page_key: str, page_title: str):
-    """페이지(문항)별 질문하기 섹션 — set_key + page_key 조합으로 별도 저장"""
-    store_key = f"{set_key}_{page_key}"
-    st.subheader(f"❓ {page_title} 관련 질문하기")
-    st.caption("이 문항에 대해 궁금한 점을 적어두면 목록에 기록됩니다. "
-               "(자동 답변 기능은 없으며, 교사 확인용 기록입니다.)")
-
+def init_qna_store():
     if "qna_store" not in st.session_state:
         st.session_state.qna_store = {}
-    if store_key not in st.session_state.qna_store:
-        st.session_state.qna_store[store_key] = []
+    for sk in RUBRIC.keys():
+        for pk in PAGE_TITLES.keys():
+            store_key = f"{sk}_{pk}"
+            if store_key not in st.session_state.qna_store:
+                st.session_state.qna_store[store_key] = []
 
+
+init_qna_store()
+
+
+def render_qna_input(set_key: str, page_key: str):
+    """학생 답안 입력 아래에 놓이는 '질문하기' 입력 폼 (목록은 교사 페이지에서 확인)"""
+    store_key = f"{set_key}_{page_key}"
+    st.markdown("---")
+    st.markdown("##### ❓ 질문하기")
+    st.caption("이 문항에 대해 궁금한 점을 남기면 교사 페이지에 모아서 표시됩니다.")
     with st.form(key=f"{store_key}_qna_form", clear_on_submit=True):
-        q_text = st.text_area("질문 내용을 입력하세요", height=100,
-                               key=f"{store_key}_qna_input")
+        q_text = st.text_area("질문 내용을 입력하세요", height=90,
+                               key=f"{store_key}_qna_input", label_visibility="collapsed",
+                               placeholder="질문을 입력하세요...")
         submitted = st.form_submit_button("질문 등록")
         if submitted and q_text.strip():
             st.session_state.qna_store[store_key].append(q_text.strip())
             st.success("질문이 등록되었습니다.")
 
-    st.markdown("---")
-    st.markdown(f"**등록된 질문 목록 ({page_title})**")
-    q_list = st.session_state.qna_store[store_key]
-    if not q_list:
-        st.info("아직 등록된 질문이 없습니다.")
-    else:
-        for i, q in enumerate(reversed(q_list), start=1):
-            st.write(f"{len(q_list) - i + 1}. {q}")
-        if st.button("전체 질문 삭제", key=f"{store_key}_qna_clear"):
-            st.session_state.qna_store[store_key] = []
-            st.rerun()
+
+def render_teacher_page():
+    """모든 세트·문항의 질문을 한눈에 모아보는 교사 페이지"""
+    st.subheader("🧑‍🏫 교사 페이지 — 학생 질문 모아보기")
+    st.caption("모든 세트와 문항에서 학생들이 등록한 질문을 한 화면에서 확인할 수 있습니다.")
+
+    total_count = sum(len(v) for v in st.session_state.qna_store.values())
+    st.markdown(f"**전체 등록 질문 수: {total_count}건**")
+
+    for sk, srubric in RUBRIC.items():
+        with st.expander(f"📂 {sk} · {srubric['title']}", expanded=True):
+            for pk, ptitle in PAGE_TITLES.items():
+                store_key = f"{sk}_{pk}"
+                q_list = st.session_state.qna_store.get(store_key, [])
+                st.markdown(f"**- {ptitle}** ({len(q_list)}건)")
+                if not q_list:
+                    st.write("　　(등록된 질문 없음)")
+                else:
+                    for i, q in enumerate(q_list, start=1):
+                        st.write(f"　　{i}. {q}")
+                    if st.button(f"{sk} / {ptitle} 질문 전체 삭제", key=f"{store_key}_teacher_clear"):
+                        st.session_state.qna_store[store_key] = []
+                        st.rerun()
 
 
-tab1, tab2, tab3 = st.tabs(
-    ["서논술형 1 (빈칸)", "서논술형 2 (문장)", "서논술형 3 (영상 기획)"]
+set_key = st.sidebar.radio("세트 선택", list(RUBRIC.keys()),
+                            format_func=lambda k: f"{k} · {RUBRIC[k]['title']}")
+set_rubric = RUBRIC[set_key]
+
+tab1, tab2, tab3, tab_teacher = st.tabs(
+    ["서논술형 1 (빈칸)", "서논술형 2 (문장)", "서논술형 3 (영상 기획)", "🧑‍🏫 교사 페이지"]
 )
-
 
 # ---------- 서논술형 1 ----------
 with tab1:
-    sub1_grade, sub1_qna = st.tabs(["✏️ 채점", "❓ 질문하기"])
-    with sub1_grade:
-        st.subheader(set_rubric["q1_blank"]["label"])
-        answers = {}
+    st.subheader(set_rubric["q1_blank"]["label"])
+    answers = {}
+    for key, item in set_rubric["q1_blank"]["items"].items():
+        with st.expander(f"모범 답안 / 인정 표현 보기 — {key}"):
+            for ma in item["model_answers"]:
+                st.write("• " + ma)
+        answers[key] = st.text_input(f"{key} 학생 답안 입력", key=f"{set_key}_q1_{key}")
+
+    # 학생 답안 입력 바로 아래 — 질문하기
+    render_qna_input(set_key, "q1")
+
+    if st.button("채점하기", key=f"{set_key}_grade_q1"):
         for key, item in set_rubric["q1_blank"]["items"].items():
-            with st.expander(f"모범 답안 / 인정 표현 보기 — {key}"):
-                for ma in item["model_answers"]:
-                    st.write("• " + ma)
-            answers[key] = st.text_input(f"{key} 학생 답안 입력", key=f"{set_key}_q1_{key}")
-
-        if st.button("채점하기", key=f"{set_key}_grade_q1"):
-            for key, item in set_rubric["q1_blank"]["items"].items():
-                text = answers[key]
-                if not text.strip():
-                    st.warning(f"{key}: 답안이 입력되지 않았습니다.")
-                    continue
-                result = grade_blank_item(text, item)
-                st.markdown(f"**{key}** → **{result['verdict']}**  "
-                            f"(필수요소 {result['hit']}/{result['total']} 충족)")
-                if result["conclusion_ok"] is not None and not result["conclusion_ok"]:
-                    st.error("⛔ 결론 방향 확인 필요: 요구된 결론 방향이 답안에 드러나지 않습니다.")
-                if result["misconception"]:
-                    st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
-
-    with sub1_qna:
-        render_qna_section("q1", set_rubric["q1_blank"]["label"])
+            text = answers[key]
+            if not text.strip():
+                st.warning(f"{key}: 답안이 입력되지 않았습니다.")
+                continue
+            result = grade_blank_item(text, item)
+            st.markdown(f"**{key}** → **{result['verdict']}**  "
+                        f"(필수요소 {result['hit']}/{result['total']} 충족)")
+            if result["conclusion_ok"] is not None and not result["conclusion_ok"]:
+                st.error("⛔ 결론 방향 확인 필요: 요구된 결론 방향이 답안에 드러나지 않습니다.")
+            if result["misconception"]:
+                st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
 
 # ---------- 서논술형 2 ----------
 with tab2:
-    sub2_grade, sub2_qna = st.tabs(["✏️ 채점", "❓ 질문하기"])
-    with sub2_grade:
-        st.subheader(set_rubric["q2_sentence"]["label"])
-        st.info("문장 끝에 사용한 설명 방법을 '(방법명)' 형태로 표기해서 입력하세요. 예: '...이다.(비교와 대조)'")
-        answers2 = {}
+    st.subheader(set_rubric["q2_sentence"]["label"])
+    st.info("문장 끝에 사용한 설명 방법을 '(방법명)' 형태로 표기해서 입력하세요. 예: '...이다.(비교와 대조)'")
+    answers2 = {}
+    for key, item in set_rubric["q2_sentence"]["items"].items():
+        allowed = ", ".join(item.get("allowed_methods", []))
+        with st.expander(f"모범 답안 보기 — {key} (허용 설명 방법: {allowed})"):
+            for ma in item["model_answers"]:
+                st.write("• " + ma)
+        answers2[key] = st.text_area(f"{key} 학생 답안 입력", key=f"{set_key}_q2_{key}", height=80)
+
+    # 학생 답안 입력 바로 아래 — 질문하기
+    render_qna_input(set_key, "q2")
+
+    if st.button("채점하기", key=f"{set_key}_grade_q2"):
         for key, item in set_rubric["q2_sentence"]["items"].items():
-            allowed = ", ".join(item.get("allowed_methods", []))
-            with st.expander(f"모범 답안 보기 — {key} (허용 설명 방법: {allowed})"):
-                for ma in item["model_answers"]:
-                    st.write("• " + ma)
-            answers2[key] = st.text_area(f"{key} 학생 답안 입력", key=f"{set_key}_q2_{key}", height=80)
-
-        if st.button("채점하기", key=f"{set_key}_grade_q2"):
-            for key, item in set_rubric["q2_sentence"]["items"].items():
-                text = answers2[key]
-                if not text.strip():
-                    st.warning(f"{key}: 답안이 입력되지 않았습니다.")
-                    continue
-                result = grade_method_sentence(text, item)
-                st.markdown(f"**{key}** → **{result['verdict']}**  "
-                            f"(선언 방법: {result['declared_method'] or '표기 없음'}, "
-                            f"내용요소 {result['hit']}/{result['total']} 충족)")
-                for n in result["notes"]:
-                    st.warning(n)
-                if result["misconception"]:
-                    st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
-
-    with sub2_qna:
-        render_qna_section("q2", set_rubric["q2_sentence"]["label"])
+            text = answers2[key]
+            if not text.strip():
+                st.warning(f"{key}: 답안이 입력되지 않았습니다.")
+                continue
+            result = grade_method_sentence(text, item)
+            st.markdown(f"**{key}** → **{result['verdict']}**  "
+                        f"(선언 방법: {result['declared_method'] or '표기 없음'}, "
+                        f"내용요소 {result['hit']}/{result['total']} 충족)")
+            for n in result["notes"]:
+                st.warning(n)
+            if result["misconception"]:
+                st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
 
 # ---------- 서논술형 3 ----------
 with tab3:
-    sub3_grade, sub3_qna = st.tabs(["✏️ 채점", "❓ 질문하기"])
-    with sub3_grade:
-        st.subheader(set_rubric["q3_av"]["label"])
-        scene1_forbidden = set_rubric["q3_av"]["scene1_forbidden"]
-        st.caption(f"※ 장면1의 특성 키워드(대비 필요): {', '.join(scene1_forbidden)}")
-        answers3 = {}
+    st.subheader(set_rubric["q3_av"]["label"])
+    scene1_forbidden = set_rubric["q3_av"]["scene1_forbidden"]
+    st.caption(f"※ 장면1의 특성 키워드(대비 필요): {', '.join(scene1_forbidden)}")
+    answers3 = {}
+    for key, item in set_rubric["q3_av"]["items"].items():
+        with st.expander(f"모범 답안 보기 — {key}"):
+            for ma in item["model_answers"]:
+                st.write("• " + ma)
+        col1, col2 = st.columns(2)
+        with col1:
+            elem = st.text_area(f"{key} — 요소 내용", key=f"{set_key}_q3_{key}_elem", height=80)
+        with col2:
+            eff = st.text_area(f"{key} — 효과 서술", key=f"{set_key}_q3_{key}_eff", height=80)
+        answers3[key] = (elem, eff)
+
+    # 학생 답안 입력 바로 아래 — 질문하기
+    render_qna_input(set_key, "q3")
+
+    if st.button("채점하기", key=f"{set_key}_grade_q3"):
         for key, item in set_rubric["q3_av"]["items"].items():
-            with st.expander(f"모범 답안 보기 — {key}"):
-                for ma in item["model_answers"]:
-                    st.write("• " + ma)
-            col1, col2 = st.columns(2)
-            with col1:
-                elem = st.text_area(f"{key} — 요소 내용", key=f"{set_key}_q3_{key}_elem", height=80)
-            with col2:
-                eff = st.text_area(f"{key} — 효과 서술", key=f"{set_key}_q3_{key}_eff", height=80)
-            answers3[key] = (elem, eff)
+            elem, eff = answers3[key]
+            if not elem.strip() or not eff.strip():
+                st.warning(f"{key}: 요소 또는 효과 서술이 입력되지 않았습니다.")
+                continue
+            result = grade_av_item(elem, eff, item, scene1_forbidden)
+            st.markdown(f"**{key}** → **{result['verdict']}**  "
+                        f"(요소 요건 {result['hit']}/{result['total']}, "
+                        f"효과 요건 {result['eff_hit']}/{result['eff_total']}, "
+                        f"장면1 대비 {'성공' if result['contrast_ok'] else '실패'})")
+            if result["misconception"]:
+                st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
 
-        if st.button("채점하기", key=f"{set_key}_grade_q3"):
-            for key, item in set_rubric["q3_av"]["items"].items():
-                elem, eff = answers3[key]
-                if not elem.strip() or not eff.strip():
-                    st.warning(f"{key}: 요소 또는 효과 서술이 입력되지 않았습니다.")
-                    continue
-                result = grade_av_item(elem, eff, item, scene1_forbidden)
-                st.markdown(f"**{key}** → **{result['verdict']}**  "
-                            f"(요소 요건 {result['hit']}/{result['total']}, "
-                            f"효과 요건 {result['eff_hit']}/{result['eff_total']}, "
-                            f"장면1 대비 {'성공' if result['contrast_ok'] else '실패'})")
-                if result["misconception"]:
-                    st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
-
-    with sub3_qna:
-        render_qna_section("q3", set_rubric["q3_av"]["label"])
+# ---------- 교사 페이지 (서논술형3 오른쪽 탭) ----------
+with tab_teacher:
+    render_teacher_page()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
