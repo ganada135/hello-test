@@ -600,7 +600,9 @@ set_key = st.sidebar.radio("세트 선택", list(RUBRIC.keys()),
                             format_func=lambda k: f"{k} · {RUBRIC[k]['title']}")
 set_rubric = RUBRIC[set_key]
 
-tab1, tab2, tab3 = st.tabs(["서논술형 1 (빈칸)", "서논술형 2 (문장)", "서논술형 3 (영상 기획)"])
+tab1, tab2, tab3, tab_qna = st.tabs(
+    ["서논술형 1 (빈칸)", "서논술형 2 (문장)", "서논술형 3 (영상 기획)", "❓ 질문하기"]
+)
 
 # ---------- 서논술형 1 ----------
 with tab1:
@@ -683,6 +685,37 @@ with tab3:
                         f"장면1 대비 {'성공' if result['contrast_ok'] else '실패'})")
             if result["misconception"]:
                 st.error("⚠ 반대 개념(오개념)으로 의심되는 표현이 포함되어 있습니다.")
+
+# ---------- 질문하기 ----------
+with tab_qna:
+    st.subheader(f"❓ {set_key} 관련 질문하기")
+    st.caption("이 지문/문항에 대해 궁금한 점을 적어두면 목록에 기록됩니다. "
+               "(자동 답변 기능은 없으며, 교사 확인용 기록입니다.)")
+
+    if "qna_store" not in st.session_state:
+        st.session_state.qna_store = {k: [] for k in RUBRIC.keys()}
+    if set_key not in st.session_state.qna_store:
+        st.session_state.qna_store[set_key] = []
+
+    with st.form(key=f"{set_key}_qna_form", clear_on_submit=True):
+        q_text = st.text_area("질문 내용을 입력하세요", height=100,
+                               key=f"{set_key}_qna_input")
+        submitted = st.form_submit_button("질문 등록")
+        if submitted and q_text.strip():
+            st.session_state.qna_store[set_key].append(q_text.strip())
+            st.success("질문이 등록되었습니다.")
+
+    st.markdown("---")
+    st.markdown(f"**등록된 질문 목록 ({set_key})**")
+    q_list = st.session_state.qna_store[set_key]
+    if not q_list:
+        st.info("아직 등록된 질문이 없습니다.")
+    else:
+        for i, q in enumerate(reversed(q_list), start=1):
+            st.write(f"{len(q_list) - i + 1}. {q}")
+        if st.button("전체 질문 삭제", key=f"{set_key}_qna_clear"):
+            st.session_state.qna_store[set_key] = []
+            st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
